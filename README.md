@@ -28,38 +28,38 @@ batch = next(iter(dm.train_dataloader()))
 
 ### Hubert Zochowski
 
+1. **Modele (2 z 3)**
+   - wytrenuj **GRU** oraz **LSTM**
+   - trening cross-day: dzien 1 train, dzien 2 test
+   - zapis embeddingow: `train_embedding.npz`, `test_embedding.npz` (per model)
+
+2. **Ewaluacja**
+   - Rank-1 Identification
+   - cosine similarity na embeddingach
+   - wspolne skrypty metryk w `metrics.py` (uzywa ich tez Dominik)
+
+3. **RSA**
+   - Representational Similarity Analysis na embeddingach modeli
+   - porownanie reprezentacji miedzy modelami
+   - wnioski: ktore urzadzenie / modalnosc daje najwiecej informacji biometrycznej
+
+### Dominik Zabielski
+
 1. **EDA**
    - charakterystyka zbioru, liczba probek, rozklad klas (osoby / urzadzenia / dni)
    - wykresy przykladowych trajektorii (pozycja kontrolerow i helmu)
    - podstawowe statystyki i obserwacje o jakosci danych
    - wynik: notatki + wykresy do raportu (folder `eda/`)
 
-2. **Modele (2 z 3)**
-   - wytrenuj **GRU** oraz **LSTM**
-   - trening cross-day: dzien 1 train, dzien 2 test
-   - zapis embeddingow: `train_embedding.npz`, `test_embedding.npz` (per model)
-
-3. **Ewaluacja**
-   - Rank-1 Identification
-   - cosine similarity na embeddingach
-   - wspolne skrypty metryk w `metrics.py` (uzywa ich tez Dominik)
-
-### Dominik Zabielski
-
-1. **Model (1 z 3) + trzeci wariant**
+2. **Model (1 z 3) + trzeci wariant**
    - wytrenuj **jeden** z: AlexNet-type CNN, Multi-Input Branch CNN, Transformer, ResNet, InceptionTime
    - dodatkowo drugi model z tej listy (razem z Hubertem macie 3 rozne klasyfikatory)
    - ten sam protokol cross-day i zapis embeddingow `.npz`
 
-2. **Eksperyment ablacyjny**
+3. **Eksperyment ablacyjny**
    - trening na modalnosciach: `position`, `rotation`, `full`
    - porownanie Rank-1 / cosine dla kazdej modalnosci i modelu
    - DataModule juz to obsluguje: `VRBiometricDataModule(modality=...)`
-
-3. **RSA**
-   - Representational Similarity Analysis na embeddingach modeli
-   - porownanie reprezentacji miedzy modelami
-   - wnioski: ktore urzadzenie / modalnosc daje najwiecej informacji biometrycznej
 
 ## Wspolne ustalenia
 
