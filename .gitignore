@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.idea/
+.vscode/
+*.egg-info/
+.pytest_cache/
+lightning_logs/
+outputs/
+embeddings/
+*.pt
+*.ckpt
+.DS_Store
+_tmp_vr/
