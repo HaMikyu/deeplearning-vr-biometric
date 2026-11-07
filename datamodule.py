@@ -94,3 +94,17 @@ class VRBiometricDataModule(L.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
         )
+
+
+if __name__ == "__main__":
+    dm = VRBiometricDataModule(batch_size=16)
+    dm.setup()
+    x, y, d = next(iter(dm.train_dataloader()))
+    print("train batch:", x.shape, y.shape, d.shape)
+    print("classes:", dm.n_classes, "features:", dm.n_features, "seq:", dm.seq_len)
+    print("sizes:", len(dm.train_ds), len(dm.val_ds), len(dm.test_ds))
+    for m in ["position", "rotation", "full"]:
+        dm_m = VRBiometricDataModule(modality=m, batch_size=8)
+        dm_m.setup()
+        xb, _, _ = next(iter(dm_m.test_dataloader()))
+        print(m, xb.shape)
