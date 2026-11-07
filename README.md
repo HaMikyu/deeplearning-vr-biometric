@@ -26,23 +26,6 @@ batch = next(iter(dm.train_dataloader()))
 
 ## Podzial zadan
 
-### Hubert Zochowski
-
-1. **Modele (2 z 3)**
-   - wytrenuj **GRU** oraz **LSTM**
-   - trening cross-day: dzien 1 train, dzien 2 test
-   - zapis embeddingow: `train_embedding.npz`, `test_embedding.npz` (per model)
-
-2. **Ewaluacja**
-   - Rank-1 Identification
-   - cosine similarity na embeddingach
-   - wspolne skrypty metryk w `metrics.py` (uzywa ich tez Dominik)
-
-3. **RSA**
-   - Representational Similarity Analysis na embeddingach modeli
-   - porownanie reprezentacji miedzy modelami
-   - wnioski: ktore urzadzenie / modalnosc daje najwiecej informacji biometrycznej
-
 ### Dominik Zabielski
 
 1. **EDA**
@@ -51,15 +34,28 @@ batch = next(iter(dm.train_dataloader()))
    - podstawowe statystyki i obserwacje o jakosci danych
    - wynik: notatki + wykresy do raportu (folder `eda/`)
 
-2. **Model (1 z 3) + trzeci wariant**
-   - wytrenuj **jeden** z: AlexNet-type CNN, Multi-Input Branch CNN, Transformer, ResNet, InceptionTime
-   - dodatkowo drugi model z tej listy (razem z Hubertem macie 3 rozne klasyfikatory)
-   - ten sam protokol cross-day i zapis embeddingow `.npz`
+2. **Wybor modeli i trening**
+   - wybierz i wytrenuj **trzy** klasyfikatory spośród: AlexNet-type CNN, Multi-Input Branch CNN, Transformer, GRU, LSTM, ResNet, InceptionTime
+   - trening cross-day: dzien 1 train, dzien 2 test
+   - zapis embeddingow: `train_embedding.npz`, `test_embedding.npz` (per model)
+   - modele w `models/`, trening w `train_*.py`
 
-3. **Eksperyment ablacyjny**
-   - trening na modalnosciach: `position`, `rotation`, `full`
+### Hubert Zochowski
+
+1. **Ewaluacja**
+   - Rank-1 Identification
+   - cosine similarity na embeddingach
+   - skrypty metryk w `metrics.py`
+
+2. **Eksperyment ablacyjny**
+   - trening / ewaluacja na modalnosciach: `position`, `rotation`, `full`
    - porownanie Rank-1 / cosine dla kazdej modalnosci i modelu
    - DataModule juz to obsluguje: `VRBiometricDataModule(modality=...)`
+
+3. **RSA**
+   - Representational Similarity Analysis na embeddingach modeli
+   - porownanie reprezentacji miedzy modelami
+   - wnioski: ktore urzadzenie / modalnosc daje najwiecej informacji biometrycznej
 
 ## Wspolne ustalenia
 
