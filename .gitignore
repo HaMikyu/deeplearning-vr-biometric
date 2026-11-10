@@ -10,7 +10,14 @@ venv/
 lightning_logs/
 outputs/
 embeddings/
+runs/
+tuning/
+dashboard.py
+dashboard.html
+dashboard_state.json
+*.log
 *.pt
 *.ckpt
 .DS_Store
 _tmp_vr/
+/docs

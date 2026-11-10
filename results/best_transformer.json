@@ -1,0 +1,18 @@
+{
+  "training": {
+    "lr": 0.0007154899566408238,
+    "weight_decay": 0.0032003616417210813,
+    "batch_size": 64
+  },
+  "model": {
+    "embedding_dim": 128,
+    "dropout": 0.15714934556980795,
+    "d_model": 128,
+    "nhead": 8,
+    "num_layers": 3,
+    "dim_feedforward": 256
+  },
+  "val_rank1": 0.9918699264526367,
+  "val_loss": 0.5366033591875216,
+  "trial": 3
+}

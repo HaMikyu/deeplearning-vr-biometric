@@ -1,10 +1,38 @@
 from pathlib import Path
 
+import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader, Dataset, Subset
 import lightning as L
 
 from helpers import DEVICES, load_day, normalize
+
+
+def stratified_throw_split(y, device_ids, val_per_group=2, seed=42):
+
+    if val_per_group < 1:
+        raise ValueError("val_per_group must be at least 1")
+
+    y = np.asarray(y)
+    device_ids = np.asarray(device_ids)
+    rng = np.random.default_rng(seed)
+    train_idx, val_idx = [], []
+
+    for subject in np.unique(y):
+        for device in np.unique(device_ids):
+            group = np.flatnonzero((y == subject) & (device_ids == device))
+            if len(group) <= 1:
+                train_idx.extend(group.tolist())
+                continue
+            group = rng.permutation(group)
+            n_val = min(val_per_group, len(group) - 1)
+            val_idx.extend(group[:n_val].tolist())
+            train_idx.extend(group[n_val:].tolist())
+
+    return (
+        np.array(sorted(train_idx), dtype=np.int64),
+        np.array(sorted(val_idx), dtype=np.int64),
+    )
 
 
 class VRMotionDataset(Dataset):
@@ -33,7 +61,7 @@ class VRBiometricDataModule(L.LightningDataModule):
         devices=None,
         batch_size=32,
         num_workers=0,
-        val_ratio=0.2,
+        val_per_group=2,
         seed=42,
     ):
         super().__init__()
@@ -42,11 +70,13 @@ class VRBiometricDataModule(L.LightningDataModule):
         self.devices = devices if devices is not None else DEVICES
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.val_ratio = val_ratio
+        self.val_per_group = val_per_group
         self.seed = seed
         self.train_ds = None
         self.val_ds = None
         self.test_ds = None
+        self.train_idx = None
+        self.val_idx = None
         self.n_features = None
         self.n_classes = None
         self.seq_len = None
@@ -65,10 +95,11 @@ class VRBiometricDataModule(L.LightningDataModule):
         self.n_classes = int(train_y.max()) + 1
 
         full_train = VRMotionDataset(train_x, train_y, train_d)
-        n_val = int(len(full_train) * self.val_ratio)
-        n_train = len(full_train) - n_val
-        gen = torch.Generator().manual_seed(self.seed)
-        self.train_ds, self.val_ds = random_split(full_train, [n_train, n_val], generator=gen)
+        self.train_idx, self.val_idx = stratified_throw_split(
+            train_y, train_d, self.val_per_group, self.seed
+        )
+        self.train_ds = Subset(full_train, self.train_idx)
+        self.val_ds = Subset(full_train, self.val_idx)
         self.test_ds = VRMotionDataset(test_x, test_y, test_d)
 
     def train_dataloader(self):
@@ -103,6 +134,11 @@ if __name__ == "__main__":
     print("train batch:", x.shape, y.shape, d.shape)
     print("classes:", dm.n_classes, "features:", dm.n_features, "seq:", dm.seq_len)
     print("sizes:", len(dm.train_ds), len(dm.val_ds), len(dm.test_ds))
+    base = dm.train_ds.dataset
+    val_y = base.y[dm.val_idx].numpy()
+    val_d = base.device_ids[dm.val_idx].numpy()
+    groups = set(zip(val_y.tolist(), val_d.tolist()))
+    print("val groups:", len(groups), "expected:", dm.n_classes * len(dm.devices))
     for m in ["position", "rotation", "full"]:
         dm_m = VRBiometricDataModule(modality=m, batch_size=8)
         dm_m.setup()
