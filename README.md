@@ -97,6 +97,54 @@ Klasyfikacja cross-day, galeria z dnia 1, probe z dnia 2:
 
 Val jest z dnia 1 i sluzy tylko do wyboru modelu. Test z dnia 2 jest jedynym wynikiem cross-day. Widac wyrazny spadek miedzy val i test, szczegolnie dla GRU, co jest oczekiwane przy zmianie dnia i pokazuje, ze sama walidacja w obrebie dnia 1 nie wystarcza do oceny biometrycznej.
 
+## Ewaluacja, ablacja modalnosci i RSA
+
+```bash
+python ablation.py   # 3 modele x 3 modalnosci -> results/ablation.csv, embeddings/<model>_<modalnosc>/
+python rsa.py        # results/rsa_models.csv, rsa_reference.csv, rsa_models.png
+```
+
+Metryki sa w `metrics.py` (Rank-1, cosine similarity). Galeria = dzien 1, probe = dzien 2,
+jeden seed (42), hiperparametry strojone na `full` uzyte dla wszystkich modalnosci.
+Wyniki `full` roznia sie nieco od tabeli wyzej, bo to osobny przebieg treningu.
+
+| Model | Modalnosc | Rank-1 | cos genuine | cos impostor | Rank-1 Quest | Rank-1 Vive | Rank-1 Cosmos |
+|---|---|---:|---:|---:|---:|---:|---:|
+| ResNet1D | position | 0.846 | 0.880 | 0.445 | 0.907 | 0.841 | 0.788 |
+| ResNet1D | rotation | 0.823 | 0.853 | 0.449 | 0.910 | 0.827 | 0.732 |
+| ResNet1D | full | 0.900 | 0.912 | 0.449 | 0.922 | 0.917 | 0.861 |
+| GRU | position | 0.619 | 0.799 | 0.413 | 0.744 | 0.595 | 0.517 |
+| GRU | rotation | 0.522 | 0.751 | 0.426 | 0.541 | 0.598 | 0.427 |
+| GRU | full | 0.663 | 0.819 | 0.445 | 0.717 | 0.707 | 0.563 |
+| Transformer | position | 0.888 | 0.847 | 0.337 | 0.915 | 0.941 | 0.807 |
+| Transformer | rotation | 0.767 | 0.780 | 0.372 | 0.790 | 0.810 | 0.702 |
+| Transformer | full | 0.922 | 0.859 | 0.354 | 0.956 | 0.946 | 0.863 |
+
+RSA (Spearman miedzy RDM-ami `1 - cosine` na dniu 2; pelna macierz w `results/rsa_models.csv`):
+
+| Przebieg | RSA z tozsamoscia | RSA z urzadzeniem |
+|---|---:|---:|
+| resnet_position | 0.248 | 0.018 |
+| resnet_rotation | 0.244 | 0.011 |
+| resnet_full | 0.257 | 0.009 |
+| gru_position | 0.211 | 0.085 |
+| gru_rotation | 0.184 | 0.047 |
+| gru_full | 0.227 | 0.058 |
+| transformer_position | 0.255 | 0.020 |
+| transformer_rotation | 0.233 | 0.014 |
+| transformer_full | 0.258 | 0.010 |
+
+Wnioski:
+
+- **Modalnosc:** `full` jest najlepsza dla kazdego modelu, a sama pozycja jest lepsza niz sama rotacja
+  (Rank-1 i RSA z tozsamoscia). Rotacja wnosi informacje uzupelniajaca: `full` > `position`.
+- **Urzadzenie:** Cosmos wypada najgorzej we wszystkich 9 przebiegach. Quest i Vive sa zblizone,
+  Quest jest najlepszy w 6 z 9 przebiegow.
+- **Modele:** reprezentacje sa podobne glownie w obrebie tej samej modalnosci (np. gru_position vs
+  transformer_position 0.51), a pozycja i rotacja daja wyraznie rozne geometrie (0.11-0.22).
+  GRU i Transformer sa do siebie blizsze niz kazdy z nich do ResNet1D.
+- GRU najmocniej koduje urzadzenie (RSA 0.05-0.09 wobec ok. 0.01-0.02) i ma najnizszy Rank-1.
+
 ## Podzial zadan
 
 ### Dominik Zabielski
