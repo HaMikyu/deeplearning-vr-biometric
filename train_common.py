@@ -101,6 +101,8 @@ def run_training(
     save_artifacts=True,
     evaluate_test=True,
     verbose=True,
+    modality="full",
+    return_embeddings=False,
 ):
     if config is None:
         config = get_config(model_name)
@@ -111,6 +113,7 @@ def run_training(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     dm = VRBiometricDataModule(
+        modality=modality,
         batch_size=train_cfg["batch_size"],
         num_workers=train_cfg["num_workers"],
         val_per_group=2,
@@ -311,6 +314,7 @@ def run_training(
 
         metrics = {
             "model": model_name,
+            "modality": modality,
             "config": config,
             "parameters": sum(p.numel() for p in model.parameters()),
             "best_epoch": best_epoch,
@@ -381,6 +385,13 @@ def run_training(
                 writer = csv.DictWriter(handle, fieldnames=list(history[0]))
                 writer.writeheader()
                 writer.writerows(history)
+
+        if return_embeddings:
+            metrics["embeddings"] = {
+                "train": train_result,
+                "val": val_result,
+                "test": test_result,
+            }
 
         if dashboard.enabled:
             dashboard.update(
