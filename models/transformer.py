@@ -3,6 +3,8 @@ import math
 import torch
 from torch import nn
 
+from .heads import embedding_layers
+
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=512, dropout=0.1):
@@ -33,6 +35,7 @@ class TransformerClassifier(nn.Module):
         num_layers=2,
         dim_feedforward=192,
         dropout=0.1,
+        linear_embedding=False,
     ):
         super().__init__()
         self.input_proj = nn.Linear(n_features, d_model)
@@ -57,9 +60,7 @@ class TransformerClassifier(nn.Module):
         )
         self.norm = nn.LayerNorm(d_model)
         self.embedding = nn.Sequential(
-            nn.Linear(d_model, embedding_dim),
-            nn.ReLU(inplace=True),
-            nn.Dropout(dropout),
+            *embedding_layers(d_model, embedding_dim, dropout, linear_embedding)
         )
         self.classifier = nn.Linear(embedding_dim, n_classes)
 

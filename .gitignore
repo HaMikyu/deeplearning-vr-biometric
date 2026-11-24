@@ -21,3 +21,9 @@ dashboard_state.json
 .DS_Store
 _tmp_vr/
 /docs
+# raport: pliki tymczasowe LaTeX i archiwum
+report/*.aux
+report/*.log
+report/*.toc
+report/*.out
+report/*.zip

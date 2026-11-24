@@ -1,0 +1,42 @@
+\begin{enumerate}
+  \item \textbf{Ruch w VR jest silną i stabilną w czasie cechą biometryczną.} Już modele bazowe
+        rozpoznają osobę następnego dnia z Rank-1 0{,}93--0{,}94 (ResNet1D, Transformer), a po
+        dopasowaniu treningu do oceny cosinusowej -- 0{,}977 na odłożonym teście (ensemble) przy EER
+        ok.~1\%. Kształt rzutu tej samej osoby jest powtarzalny między dniami, a różnice
+        międzyosobnicze (tempo, amplituda, orientacja dłoni i głowy) są wyraźne.
+  \item \textbf{Reprezentacja danych waży więcej niż wybór architektury.} Dwie największe poprawy w
+        projekcie nie wynikają z modelu, tylko z cech wejściowych i funkcji straty:
+        (a) ciągła reprezentacja 6D rotacji zamiast kątów Eulera -- odwróciła ranking modalności i
+        podniosła Rank-1 rotacji GRU z 0{,}52 do 0{,}74; (b) ArcFace i prędkości -- podniosły
+        GRU z 0{,}82 do 0{,}97--0{,}98 i zrównały wszystkie cztery architektury (0{,}960--0{,}972).
+        RSA prowadzi do tego samego wniosku: embeddingi różnych modeli z tej samej modalności są do
+        siebie bardziej podobne niż embeddingi jednego modelu z różnych modalności.
+  \item \textbf{Modalności:} pełny $>$ rotacja $>$ pozycja dla każdego modelu i każdej metryki.
+        Rotacja (orientacja kontrolerów i hełmu) niesie więcej informacji biometrycznej niż pozycja,
+        a obie są komplementarne. Pozycja dodatkowo koduje urządzenie (RSA z urządzeniem do 0{,}09),
+        czyli cechę niepożądaną w biometrii.
+  \item \textbf{Urządzenia:} najwięcej informacji biometrycznej dostarcza Quest (najwyższy Rank-1 w
+        9/9 konfiguracjach S2), potem Vive; najmniej -- Cosmos (najniższy Rank-1 w 9/9 konfiguracjach
+        S2 i we wszystkich modelach S4; w S4 to 0{,}93--0{,}94 wobec 0{,}97--1{,}00). Większość
+        błędów najlepszego systemu pochodzi z Cosmosa.
+  \item \textbf{Porównanie klasyfikatorów.} W ustawieniu bazowym (CE): Transformer $\geq$ ResNet1D
+        $\gg$ GRU. Transformer najlepiej separuje osoby przy 6 razy mniejszej liczbie parametrów niż
+        ResNet1D, a GRU jest najsłabszy i najmocniej koduje urządzenie. W ustawieniu S4 różnice
+        prawie znikają, a najlepszy pojedynczy model to InceptionTime. Ensemble różnych architektur
+        jest najlepszy (Rank-1 0{,}977, EER 0{,}012), bo modele mylą się na różnych próbach.
+  \item \textbf{Metodologia oceny.} Walidacja w obrębie dnia~1 jest nasycona (Rank-1 0{,}97--1{,}00)
+        i nie przewiduje wyniku cross-day, dlatego model wybieramy po val loss. Dobór przepisu na
+        części dnia~2 zawyża wynik o ok.~1~p.p. (dev 0{,}992 vs test 0{,}977), dlatego raportujemy
+        odłożony test. Ranking Rank-$k$ musi być liczony po osobach, a nie po próbkach.
+\end{enumerate}
+
+\paragraph{Ograniczenia.} 41 osób i jedno zadanie ruchowe; identyfikacja w zbiorze zamkniętym
+(wszystkie osoby są w galerii); dwa dni nagrań, więc nie wiemy, jak wynik zachowuje się po
+tygodniach. Przepis S4 wybieraliśmy na 2 seedach i części wariantów, a różnice rzędu
+$\pm 1{,}5$~p.p. na dev (do ok.~9 prób z 615) są na granicy szumu. Hipotezy o przyczynach słabości Cosmosa
+(jakość śledzenia) nie da się zweryfikować na tym korpusie.
+
+\paragraph{Dalsze kierunki.} Weryfikacja w zbiorze otwartym (osoby spoza treningu w galerii i
+próbach), adaptacja domeny między dniami, oddzielne modele lub normalizacja per urządzenie dla
+Cosmosa oraz analiza, które fragmenty rzutu (np. przez mapy uwagi Transformera) niosą najwięcej
+informacji biometrycznej.

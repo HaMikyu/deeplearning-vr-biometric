@@ -1,0 +1,90 @@
+%=====================================================================
+\subsection{S4: scenariusz rozszerzony -- w stronę SOTA}\label{sec:sota}
+%=====================================================================
+Scenariusze S1--S3 używają klasyfikatora uczonego entropią krzyżową, a decyzję biometryczną
+podejmują na podobieństwie cosinusowym embeddingów. Te dwa cele nie są ze sobą zgodne: entropia
+krzyżowa nie wymusza, by próbki tej samej osoby leżały blisko na sferze. W S4 sprawdzamy, ile
+można zyskać, dopasowując trening do sposobu oceny i do zmiany dnia.
+
+\paragraph{Protokół bez wycieku informacji z testu.} Przy doborze przepisu musimy patrzeć na wyniki
+cross-day, ale nie możemy tego robić na zbiorze, na którym raportujemy wynik. Dlatego dzień~2
+dzielimy po numerze rzutu: rzuty 0--4 każdej osoby na każdym urządzeniu tworzą zbiór \emph{dev}
+(615 prób), a rzuty 5--9 zbiór \emph{test} (615 prób). Każda osoba i każde urządzenie występują w obu
+połowach. Wszystkie decyzje (tab.~\ref{tab:sota-comp}, \ref{tab:sota-extra}) podejmujemy wyłącznie
+na dev; \textbf{wynikiem S4 jest test}. Dla porównania z S1/S2 podajemy też wynik na całym dniu~2,
+który jest nieco optymistyczny, bo zawiera dev.
+
+\paragraph{Składniki przepisu.}
+\begin{enumerate}
+  \item \textbf{ArcFace} \cite{arcface} -- addytywny margines kątowy: logit prawdziwej klasy to
+        $s\cos(\theta_y + m)$, pozostałych $s\cos\theta_j$, gdzie $\theta$ to kąt między
+        znormalizowanym embeddingiem a wektorem klasy ($s = 30$, $m = 0{,}3$). Funkcja straty
+        bezpośrednio optymalizuje separację kątową, czyli dokładnie to, co mierzy podobieństwo
+        cosinusowe. Głowicę embeddingu zmieniamy na \code{Linear}~$\to$~\code{BatchNorm} (bez ReLU),
+        żeby embedding mógł wykorzystać całą sferę.
+  \item \textbf{Augmentacje} (na GPU, w jednostkach znormalizowanych): losowe przycięcie i
+        rozciągnięcie w czasie (skala $\mathcal{U}(0{,}85; 1)$, czyli zmiana tempa rzutu),
+        skalowanie amplitudy kanałów ($\mathcal{N}(1; 0{,}05)$) i szum gaussowski ($\sigma = 0{,}03$).
+  \item \textbf{EMA wag} \cite{ema} (zanik 0{,}995 na krok); embeddingi liczymy modelem uśrednionym.
+  \item \textbf{Centrowanie poziome} -- od współrzędnych $x, z$ odejmujemy ich średnią po czasie i
+        sensorach w danym rzucie. Usuwa to miejsce, w którym osoba stała w danej sesji, a zachowuje
+        wzrost ($y$) i wzajemne położenie hełmu i kontrolerów.
+  \item \textbf{Prędkości} -- do 27 kanałów dokładamy ich pierwsze różnice w czasie (54 kanały).
+        Prędkość jest niezmiennicza względem stałego przesunięcia i bezpośrednio opisuje dynamikę
+        ruchu.
+  \item \textbf{Harmonogram} -- 150 epok, AdamW (lr $10^{-3}$, wd 0{,}05), batch 64, 5 epok rozgrzewki
+        i spadek cosinusowy do zera, bez wczesnego zatrzymania. Zbiór walidacyjny nie jest więc
+        potrzebny, co pozwala trenować na \textbf{całym dniu~1} (1230 zamiast 984 próbek); galerią
+        jest wtedy cały dzień~1.
+  \item \textbf{InceptionTime} jako czwarty model oraz \textbf{ensemble}: konkatenacja
+        znormalizowanych embeddingów modeli, co jest równoważne uśrednieniu ich podobieństw
+        cosinusowych.
+\end{enumerate}
+Architektury ResNet1D, GRU i Transformera pozostają takie jak w S1 (tab.~\ref{tab:hparams}).
+
+\paragraph{Ablacja składników (dev).} Tabela~\ref{tab:sota-comp} i rys.~\ref{fig:sota-comp}
+pokazują efekt dokładania kolejnych składników (średnia z 2 seedów). Wiersz \emph{baseline} to ten
+sam trening co w S1, ale w nowej pętli (150 epok, bez wczesnego zatrzymania).
+
+\begin{table}[H]
+\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{S4: ablacja składników na zbiorze dev (dzień 2, rzuty 0--4), średnia z seedów 42 i 43.
+Każdy wiersz zawiera wszystkie składniki z wierszy powyżej; \emph{baseline} -- CE i cechy jak w S1,
+150 epok bez wczesnego zatrzymania.}
+\label{tab:sota-comp}
+\begin{tabular}{@{}lrrrrrrrr@{}}
+\toprule
+& \multicolumn{2}{c}{ResNet1D} & \multicolumn{2}{c}{GRU} & \multicolumn{2}{c}{Transformer} & \multicolumn{2}{c}{InceptionTime} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(l){8-9}
+Wariant & R-1 & EER & R-1 & EER & R-1 & EER & R-1 & EER \\
+\midrule
+\tabinput{tables/sota_components.tex}
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{sota_components.pdf}
+\caption{S4: wpływ kolejnych składników na Rank-1 i EER (dev).}
+\label{fig:sota-comp}
+\end{figure}
+
+\begin{table}[H]
+\centering\small
+\caption{S4: pojedyncze zmiany względem pełnego przepisu (dev). GRU -- średnia z 2 seedów,
+Transformer -- seed 42 (wiersz odniesienia: średnia z 2 seedów).}
+\label{tab:sota-extra}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+& \multicolumn{2}{c}{GRU} & \multicolumn{2}{c}{Transformer} \\
+\cmidrule(lr){2-3}\cmidrule(l){4-5}
+Wariant & R-1 & EER & R-1 & EER \\
+\midrule
+\tabinput{tables/sota_extras.tex}
+\bottomrule
+\end{tabular}
+\end{table}
+
+\input{sota_discussion.tex}

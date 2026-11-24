@@ -63,8 +63,12 @@ class VRBiometricDataModule(L.LightningDataModule):
         num_workers=0,
         val_per_group=2,
         seed=42,
+        center_xz=False,
+        velocity=False,
     ):
         super().__init__()
+        self.center_xz = center_xz
+        self.velocity = velocity
         self.data_dir = Path(data_dir)
         self.modality = modality
         self.devices = devices if devices is not None else DEVICES
@@ -83,10 +87,12 @@ class VRBiometricDataModule(L.LightningDataModule):
 
     def setup(self, stage=None):
         train_x, train_y, train_d = load_day(
-            self.data_dir, 1, self.devices, self.modality
+            self.data_dir, 1, self.devices, self.modality,
+            self.center_xz, self.velocity,
         )
         test_x, test_y, test_d = load_day(
-            self.data_dir, 2, self.devices, self.modality
+            self.data_dir, 2, self.devices, self.modality,
+            self.center_xz, self.velocity,
         )
         train_x, test_x = normalize(train_x, test_x)
 
@@ -101,6 +107,8 @@ class VRBiometricDataModule(L.LightningDataModule):
         self.train_ds = Subset(full_train, self.train_idx)
         self.val_ds = Subset(full_train, self.val_idx)
         self.test_ds = VRMotionDataset(test_x, test_y, test_d)
+        # numer rzutu (0-9) w sesji; kolejnosc probek: urzadzenie, osoba, rzut
+        self.test_throw = np.arange(len(test_y)) % 10
 
     def train_dataloader(self):
         return DataLoader(

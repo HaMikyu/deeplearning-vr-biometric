@@ -1,5 +1,7 @@
 from torch import nn
 
+from .heads import embedding_layers
+
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, dropout=0.1):
@@ -54,6 +56,7 @@ class ResNet1D(nn.Module):
         embedding_dim=128,
         base_channels=64,
         dropout=0.1,
+        linear_embedding=False,
     ):
         super().__init__()
         self.stem = nn.Sequential(
@@ -91,9 +94,9 @@ class ResNet1D(nn.Module):
         self.pool = nn.AdaptiveAvgPool1d(1)
         self.embedding = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(base_channels * 4, embedding_dim),
-            nn.ReLU(inplace=True),
-            nn.Dropout(dropout),
+            *embedding_layers(
+                base_channels * 4, embedding_dim, dropout, linear_embedding
+            ),
         )
         self.classifier = nn.Linear(embedding_dim, n_classes)
 

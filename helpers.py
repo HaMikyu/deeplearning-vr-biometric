@@ -49,27 +49,45 @@ def encode_rotation(rot):
     return six_d.reshape(*shape, n_sensors * 6)
 
 
-def flatten_session(arr, modality="full"):
+def center_horizontal(pos):
+    """Odejmuje od x i z (os y = pion) srednia po czasie i sensorach danego rzutu.
+
+    Usuwa miejsce, w ktorym osoba stala w danej sesji (zmienia sie miedzy
+    dniami), a zostawia wzrost i wzajemne polozenie helmu i kontrolerow.
+    """
+    pos = pos.reshape(*pos.shape[:-1], 3, 3).copy()
+    # osie: (..., czas, sensor, wspolrzedna) -> srednia po czasie i sensorach
+    offset = pos[..., [0, 2]].mean(axis=(-3, -2), keepdims=True)
+    pos[..., [0, 2]] -= offset
+    return pos.reshape(*pos.shape[:-2], 9)
+
+
+def flatten_session(arr, modality="full", center_xz=False, velocity=False):
     modality_indices(modality)
     n_subj, n_throws, n_t, _ = arr.shape
     parts = []
     if modality in ("position", "full"):
-        parts.append(arr[..., POS_IDX])
+        pos = arr[..., POS_IDX]
+        parts.append(center_horizontal(pos) if center_xz else pos)
     if modality in ("rotation", "full"):
         parts.append(encode_rotation(arr[..., ROT_IDX]))
     x = np.concatenate(parts, axis=-1)
+    if velocity:
+        # pierwsze roznice w czasie (predkosc), dlugosc sekwencji bez zmian
+        vel = np.diff(x, axis=2, prepend=x[:, :, :1])
+        x = np.concatenate([x, vel], axis=-1)
     x = x.reshape(n_subj * n_throws, n_t, x.shape[-1])
     y = np.repeat(np.arange(n_subj), n_throws)
     return x.astype(np.float32), y.astype(np.int64)
 
 
-def load_day(data_dir, day, devices=None, modality="full"):
+def load_day(data_dir, day, devices=None, modality="full", center_xz=False, velocity=False):
     if devices is None:
         devices = DEVICES
     xs, ys, ds = [], [], []
     for device in devices:
         arr = load_session(data_dir, device, day)
-        x, y = flatten_session(arr, modality)
+        x, y = flatten_session(arr, modality, center_xz, velocity)
         xs.append(x)
         ys.append(y)
         ds.append(np.full(len(y), DEVICES.index(device), dtype=np.int64))

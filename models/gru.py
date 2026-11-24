@@ -1,5 +1,7 @@
 from torch import nn
 
+from .heads import embedding_layers
+
 
 class GRUClassifier(nn.Module):
     def __init__(
@@ -10,6 +12,7 @@ class GRUClassifier(nn.Module):
         hidden_size=96,
         num_layers=2,
         dropout=0.2,
+        linear_embedding=False,
     ):
         super().__init__()
         self.gru = nn.GRU(
@@ -21,9 +24,7 @@ class GRUClassifier(nn.Module):
             dropout=dropout if num_layers > 1 else 0.0,
         )
         self.embedding = nn.Sequential(
-            nn.Linear(hidden_size * 2, embedding_dim),
-            nn.ReLU(inplace=True),
-            nn.Dropout(dropout),
+            *embedding_layers(hidden_size * 2, embedding_dim, dropout, linear_embedding)
         )
         self.classifier = nn.Linear(embedding_dim, n_classes)
 

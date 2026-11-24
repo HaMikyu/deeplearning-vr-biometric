@@ -179,6 +179,49 @@ i `results/rsa_models.png`.
   (np. GRU 0.087 vs 0.029, Transformer 0.048 vs 0.005) - pozycje zaleza od ukladu wspolrzednych
   trackingu danego zestawu, orientacja mniej. GRU najmocniej koduje urzadzenie i ma najnizszy Rank-1.
 
+## S4: scenariusz rozszerzony (SOTA)
+
+`sota.py` - osobny, lekki pipeline (baseline zostaje odtwarzalny bez zmian):
+
+- **ArcFace** (s=30, m=0.3) + liniowa glowica embeddingu (Linear -> BatchNorm, bez ReLU),
+- augmentacje na GPU (tempo/przyciecie, amplituda, szum), EMA wag,
+- cechy odporne na zmiane dnia: centrowanie x/z per rzut (`center_xz`) i **predkosci** (`velocity`, 54 kanaly),
+- 150 epok, AdamW, warmup + cosinus, bez early stoppingu -> mozna trenowac na **calym dniu 1**,
+- czwarty model z listy: **InceptionTime** (`models/inception.py`) i **ensemble** (konkatenacja embeddingow L2).
+
+Protokol bez wycieku z testu: dzien 2 dzielony po rzutach - **dev** = rzuty 0-4 (wybor przepisu),
+**test** = rzuty 5-9 (raport). Wybrany na dev przepis: `full_day1`.
+
+```bash
+python sota.py screen --models gru --variants base arcface full full_day1   # wybor na dev
+python sota.py final                                                        # full_day1, 4 modele + ensemble, 3 seedy
+```
+
+Wynik (test = dzien 2, rzuty 5-9, srednia ± odch. z 3 seedow; `results/sota_summary_full_day1.json`):
+
+| Model | Rank-1 test | EER test | Rank-1 caly dzien 2 | baseline S2 (full) |
+|---|---:|---:|---:|---:|
+| ResNet1D | 0.960 ± 0.004 | 0.016 | 0.968 | 0.927 |
+| GRU | 0.971 ± 0.005 | 0.021 | 0.979 | 0.815 |
+| Transformer | 0.969 ± 0.003 | 0.019 | 0.974 | 0.938 |
+| InceptionTime | 0.972 ± 0.002 | 0.018 | 0.979 | - |
+| **Ensemble (4 modele)** | **0.977 ± 0.002** | **0.012** | **0.985** | - |
+
+Najwiecej daja ArcFace (GRU 0.82 -> 0.98 na dev) i predkosci; augmentacje, EMA i centrowanie sa
+w granicach szumu. Ok. 4x mniej bledow niz najlepszy baseline. Cosmos nadal najslabszy (0.93-0.94).
+Ablacja skladnikow: `results/sota_screen_*.csv`.
+
+## Raport
+
+`report/raport.pdf` - raport techniczny (EDA, modele, trening, scenariusze S1-S4, wyniki, RSA, wnioski).
+Wszystkie tabele i wykresy sa generowane z `results/` i `embeddings/`:
+
+```bash
+python report/make_tables.py && python report/make_figures.py
+cd report && pdflatex raport.tex && pdflatex raport.tex
+python report/make_zip.py   # report/VR_biometria_kod_i_materialy.zip do oddania (kod, dane, wyniki, embeddingi, raport)
+```
+
 ## Wyniki przed poprawkami (archiwalne)
 
 Ponizsze tabele sa ze starego kodu: surowe katy Eulera, Rank-5 liczony po probkach (zanizony),
