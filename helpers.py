@@ -24,10 +24,41 @@ def load_session(data_dir, device, day):
     return np.load(path)
 
 
+EULER_SEQ = "xyz"
+
+
+def encode_rotation(rot):
+    """Katy Eulera (3 sensory x 3 katy) -> reprezentacja 6D (3 sensory x 6).
+
+    Surowe katy maja dwa problemy:
+    - zawijaja sie na granicy +-pi (np. 3.1 -> -3.1 w jednym kroku),
+    - gimbal lock: gdy rot_y zbliza sie do +-pi/2, rot_x i rot_z przeskakuja
+      razem, mimo ze sama orientacja zmienia sie plynnie.
+    Dlatego katy zamieniamy na macierz rotacji i bierzemy jej dwie pierwsze
+    kolumny (reprezentacja 6D, Zhou i in. 2019). Jest ona ciagla.
+    Kolejnosc "xyz" (zewnetrzna) wybrana empirycznie: przy niej orientacja
+    helmu i lewego kontrolera zmienia sie miedzy klatkami o < 0.2 rad.
+    """
+    from scipy.spatial.transform import Rotation
+
+    shape = rot.shape[:-1]
+    n_sensors = rot.shape[-1] // 3
+    eulers = rot.reshape(-1, 3).astype(np.float64)
+    matrices = Rotation.from_euler(EULER_SEQ, eulers).as_matrix()
+    six_d = matrices[:, :, :2].transpose(0, 2, 1).reshape(-1, 6)
+    return six_d.reshape(*shape, n_sensors * 6)
+
+
 def flatten_session(arr, modality="full"):
-    idx = modality_indices(modality)
+    modality_indices(modality)
     n_subj, n_throws, n_t, _ = arr.shape
-    x = arr[:, :, :, idx].reshape(n_subj * n_throws, n_t, len(idx))
+    parts = []
+    if modality in ("position", "full"):
+        parts.append(arr[..., POS_IDX])
+    if modality in ("rotation", "full"):
+        parts.append(encode_rotation(arr[..., ROT_IDX]))
+    x = np.concatenate(parts, axis=-1)
+    x = x.reshape(n_subj * n_throws, n_t, x.shape[-1])
     y = np.repeat(np.arange(n_subj), n_throws)
     return x.astype(np.float32), y.astype(np.int64)
 

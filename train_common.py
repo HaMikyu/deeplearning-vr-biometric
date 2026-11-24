@@ -7,12 +7,13 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.utils.data import DataLoader
 
 from configs import get_config
 from datamodule import VRBiometricDataModule
+from metrics import evaluate as embedding_metrics
+from metrics import ranking_metrics
 from models import build_model
 
 try:
@@ -67,20 +68,6 @@ def evaluate(model, loader, criterion, device):
         "labels": torch.cat(labels).numpy(),
         "device_ids": torch.cat(device_ids).numpy(),
     }
-
-
-def ranking_metrics(query_embeddings, query_labels, gallery_embeddings, gallery_labels):
-    query = F.normalize(torch.from_numpy(query_embeddings).float(), dim=1)
-    gallery = F.normalize(torch.from_numpy(gallery_embeddings).float(), dim=1)
-    similarities = query @ gallery.T
-    gallery_labels_t = torch.from_numpy(gallery_labels)
-    query_labels_t = torch.from_numpy(query_labels)
-    top = similarities.topk(k=min(5, similarities.size(1)), dim=1).indices
-    predicted = gallery_labels_t[top[:, 0]]
-    rank1 = (predicted == query_labels_t).float().mean().item()
-    top_labels = gallery_labels_t[top]
-    rank5 = (top_labels == query_labels_t.unsqueeze(1)).any(dim=1).float().mean().item()
-    return {"rank1": rank1, "rank5": rank5}
 
 
 def save_embedding(path, result):
@@ -246,7 +233,9 @@ def run_training(
             }
             history.append(entry)
 
-            score = (val_ranking["rank1"], -val_result["loss"])
+            # Val Rank-1 z dnia 1 szybko dochodzi do ~1.0 i przestaje
+            # rozrozniac modele, dlatego model wybieramy po val_loss.
+            score = -val_result["loss"]
             improved = best_score is None or score > best_score
             if improved:
                 best_score = score
@@ -305,9 +294,10 @@ def run_training(
         test_ranking = None
         if evaluate_test:
             test_result = evaluate(model, test_loader, criterion, device)
-            test_ranking = ranking_metrics(
+            test_ranking = embedding_metrics(
                 test_result["embeddings"],
                 test_result["labels"],
+                test_result["device_ids"],
                 train_result["embeddings"],
                 train_result["labels"],
             )

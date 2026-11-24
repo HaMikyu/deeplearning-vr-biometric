@@ -99,11 +99,8 @@ def tune_model(model_name, trials, epochs, seed):
         writer.writeheader()
         writer.writerows(rows)
 
-    best = sorted(
-        rows,
-        key=lambda row: (row["val_rank1"], -row["val_loss"]),
-        reverse=True,
-    )[0]
+    # val Rank-1 z dnia 1 jest nasycony (~0.95-1.0), wiec wybieramy po val_loss
+    best = min(rows, key=lambda row: row["val_loss"])
     training_keys = [
         "lr",
         "weight_decay",

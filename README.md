@@ -6,9 +6,16 @@ Korpus: [VR-Biometric-Authentication](https://github.com/weibo053/VR-Biometric-A
 (commit `4bbc555`). Dane ruchu VR: 41 osob, 3 urzadzenia (Quest, Vive, Cosmos), 2 dni, 10 rzutow na sesje.
 Shape pliku: `(41, 10, 135, 21)`.
 
+> **Uwaga:** kod został poprawiony (rotacja 6D, Rank-k po osobach, EER, early stopping po `val_loss`,
+> ablacja na 3 seedach). Liczby w tabelach poniżej pochodzą jeszcze ze **starego kodu**.
+> Instrukcja ponownego treningu: [TRENING.md](TRENING.md).
+
 ## Juz zrobione
 
 - `helpers.py` - ladowanie sesji, wybór modalnosci (pozycja / rotacja / full), normalizacja
+  - rotacja: katy Eulera -> macierz rotacji (kolejnosc `xyz`) -> reprezentacja 6D (2 kolumny macierzy),
+    bo surowe katy zawijaja sie na +-pi i maja gimbal lock (patrz EDA, sekcja 10a)
+  - liczba cech: `position` 9, `rotation` 18, `full` 27
 - `datamodule.py` - PyTorch Lightning `VRBiometricDataModule`
   - train = dzien 1, test = dzien 2 (cross-day)
   - `modality`: `"position"`, `"rotation"`, `"full"`
@@ -19,9 +26,13 @@ Shape pliku: `(41, 10, 135, 21)`.
 - `EDA/EDA.ipynb` - pelna EDA z wykresami w `EDA/figures/`
 - `models/` - trzy klasyfikatory: `ResNet1D`, `GRUClassifier`, `TransformerClassifier`
 - `train_common.py` + `train_resnet.py`, `train_gru.py`, `train_transformer.py`
-  - trening cross-day, wczesne zatrzymanie na val Rank-1
+  - trening cross-day, wczesne zatrzymanie i wybor modelu po `val_loss`
+    (val Rank-1 z dnia 1 jest nasycony ~1.0 i nie rozroznia modeli)
   - zapis checkpointow, historii i metryk w `results/`
-- `tune_models.py` - random search hiperparametrow z wczesnym zatrzymaniem
+- `tune_models.py` - random search hiperparametrow, wybor po `val_loss`
+- `metrics.py` - Rank-1 / Rank-5 (ranking po osobach), EER, cosine genuine / impostor, Rank-1 per urzadzenie
+- `ablation.py` - model x modalnosc x seed (domyslnie 3 seedy), srednia i odchylenie
+- `report_tables.py` - tabele markdown z `results/` do README i raportu
 - `embeddings/<model>/` - `train_embedding.npz`, `val_embedding.npz`, `test_embedding.npz`
 
 Przyklad:
@@ -85,7 +96,11 @@ python train_resnet.py --epochs 80 --lr 0.0005
 python train_resnet.py --no-test
 ```
 
-## Wyniki
+## Wyniki przed poprawkami (archiwalne)
+
+Ponizsze tabele sa ze starego kodu: surowe katy Eulera, Rank-5 liczony po probkach (zanizony),
+wybor modelu po val Rank-1, jeden seed. Zostawione do porownania w raporcie.
+Po ponownym treningu nowe tabele wygeneruje `python report_tables.py`.
 
 Klasyfikacja cross-day, galeria z dnia 1, probe z dnia 2:
 
@@ -100,12 +115,13 @@ Val jest z dnia 1 i sluzy tylko do wyboru modelu. Test z dnia 2 jest jedynym wyn
 ## Ewaluacja, ablacja modalnosci i RSA
 
 ```bash
-python ablation.py   # 3 modele x 3 modalnosci -> results/ablation.csv, embeddings/<model>_<modalnosc>/
+python ablation.py   # 3 modele x 3 modalnosci x 3 seedy -> results/ablation.csv, ablation_runs.csv, embeddings/<model>_<modalnosc>/
 python rsa.py        # results/rsa_models.csv, rsa_reference.csv, rsa_models.png
 ```
 
-Metryki sa w `metrics.py` (Rank-1, cosine similarity). Galeria = dzien 1, probe = dzien 2,
-jeden seed (42), hiperparametry strojone na `full` uzyte dla wszystkich modalnosci.
+Metryki sa w `metrics.py` (Rank-1, Rank-5, EER, cosine similarity). Galeria = dzien 1, probe = dzien 2,
+hiperparametry strojone na `full` uzyte dla wszystkich modalnosci.
+Ponizsze liczby sa ze starego kodu (jeden seed, surowe katy Eulera).
 Wyniki `full` roznia sie nieco od tabeli wyzej, bo to osobny przebieg treningu.
 
 | Model | Modalnosc | Rank-1 | cos genuine | cos impostor | Rank-1 Quest | Rank-1 Vive | Rank-1 Cosmos |
@@ -134,7 +150,7 @@ RSA (Spearman miedzy RDM-ami `1 - cosine` na dniu 2; pelna macierz w `results/rs
 | transformer_rotation | 0.233 | 0.014 |
 | transformer_full | 0.258 | 0.010 |
 
-Wnioski:
+Wnioski ze starych wynikow (do weryfikacji po ponownym treningu, zwlaszcza position vs rotation):
 
 - **Modalnosc:** `full` jest najlepsza dla kazdego modelu, a sama pozycja jest lepsza niz sama rotacja
   (Rank-1 i RSA z tozsamoscia). Rotacja wnosi informacje uzupelniajaca: `full` > `position`.
