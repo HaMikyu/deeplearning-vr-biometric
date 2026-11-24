@@ -6,9 +6,8 @@ Korpus: [VR-Biometric-Authentication](https://github.com/weibo053/VR-Biometric-A
 (commit `4bbc555`). Dane ruchu VR: 41 osob, 3 urzadzenia (Quest, Vive, Cosmos), 2 dni, 10 rzutow na sesje.
 Shape pliku: `(41, 10, 135, 21)`.
 
-> **Uwaga:** kod został poprawiony (rotacja 6D, Rank-k po osobach, EER, early stopping po `val_loss`,
-> ablacja na 3 seedach). Liczby w tabelach poniżej pochodzą jeszcze ze **starego kodu**.
-> Instrukcja ponownego treningu: [TRENING.md](TRENING.md).
+> Wyniki w tabelach pochodza z kodu po poprawkach (rotacja 6D, Rank-k po osobach, EER,
+> early stopping po `val_loss`, ablacja na 3 seedach). Instrukcja ponownego treningu: [TRENING.md](TRENING.md).
 
 ## Juz zrobione
 
@@ -63,10 +62,10 @@ Uzasadnienie wyboru:
 
 ## Strojenie hiperparametrow
 
-Zamiast grid search uzywamy **random search** z malym, stalym budzetem epok. Grid search rosnie wykladniczo z liczba parametrow i marnuje budzet na kombinacje, ktore i tak sa slabe. Random search lepiej pokrywa wazne wymiary, a w finalnym treningu dodatkowo dziala early stopping na val Rank-1.
+Zamiast grid search uzywamy **random search** z malym, stalym budzetem epok. Grid search rosnie wykladniczo z liczba parametrow i marnuje budzet na kombinacje, ktore i tak sa slabe. Random search lepiej pokrywa wazne wymiary, a w finalnym treningu dodatkowo dziala early stopping na `val_loss`.
 
 ```bash
-python tune_models.py --model all --trials 4 --epochs 15
+python tune_models.py --model all --trials 6 --epochs 15
 ```
 
 Wyniki trafiaja do `results/tuning_<model>.csv`, a najlepsza konfiguracja do `results/best_<model>.json`. Skrypty treningowe automatycznie ja wczytuja przez `configs.get_config`.
@@ -89,6 +88,11 @@ Kazdy skrypt:
 - zapisuje metryki i historie do `results/`,
 - zapisuje embeddingi do `embeddings/<model>/`.
 
+Na GPU caly zbior (ok. 1-2 MB) jest trzymany w pamieci karty i batchowany indeksami
+(`TensorBatches` w `train_common.py`) zamiast przez `DataLoader`. Na RTX 3070 Ti: strojenie (3 modele x 6 prob x 15 epok)
+ok. 2.5 min, trening trzech modeli ok. 50 s, ablacja 27 przebiegow ok. 5 min, RSA ok. 10 s
+(na CPU ok. 17 s na epoke).
+
 Przydatne flagi:
 
 ```bash
@@ -96,11 +100,89 @@ python train_resnet.py --epochs 80 --lr 0.0005
 python train_resnet.py --no-test
 ```
 
+## Wyniki
+
+Wszystkie liczby ponizej pochodza z `results/` po ponownym treningu na poprawionym kodzie
+(rotacja 6D, Rank-k po osobach, EER, wybor modelu po `val_loss`). Tabele generuje `python report_tables.py`.
+Galeria = dzien 1 (train), probe = dzien 2 (test), podobienstwo cosinusowe embeddingow.
+
+### Trening glowny (modalnosc full, seed 42)
+
+| Model | Parametry | Best epoch | Val Rank-1 | Test Rank-1 | Test Rank-5 | Test EER |
+|---|---:|---:|---:|---:|---:|---:|
+| ResNet1D | 2,217,545 | 50 | 0.9959 | 0.9317 | 0.9813 | 0.0180 |
+| GRUClassifier | 158,761 | 57 | 0.9715 | 0.7919 | 0.9488 | 0.0783 |
+| TransformerClassifier | 373,769 | 38 | 1.0000 | 0.9569 | 0.9927 | 0.0195 |
+
+Val jest z dnia 1 i sluzy tylko do wyboru modelu. Test z dnia 2 jest jedynym wynikiem cross-day.
+Spadek val -> test jest nadal widoczny (najwiekszy dla GRU: 0.97 -> 0.79), ale mniejszy niz przed poprawkami.
+
+## Ewaluacja, ablacja modalnosci i RSA
+
+```bash
+python ablation.py   # 3 modele x 3 modalnosci x 3 seedy -> results/ablation.csv, ablation_runs.csv, embeddings/<model>_<modalnosc>/
+python rsa.py        # results/rsa_models.csv, rsa_reference.csv, rsa_models.png
+```
+
+Metryki sa w `metrics.py` (Rank-1, Rank-5, EER, cosine similarity). Hiperparametry strojone na `full`
+uzyte dla wszystkich modalnosci. Seed zmienia inicjalizacje, kolejnosc batchy i podzial walidacji.
+Kazdy przebieg osobno: `results/ablation_runs.csv`.
+
+### Ablacja (srednia ± odchylenie z 3 seedow: 42, 43, 44; dzien 2)
+
+| Model | Modalnosc | Rank-1 | Rank-5 | EER | cos genuine | cos impostor | Rank-1 Quest | Rank-1 Vive | Rank-1 Cosmos |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| ResNet1D | position | 0.840 ± 0.013 | 0.948 ± 0.009 | 0.050 ± 0.007 | 0.875 ± 0.004 | 0.472 ± 0.007 | 0.902 ± 0.017 | 0.829 ± 0.013 | 0.788 ± 0.024 |
+| ResNet1D | rotation | 0.871 ± 0.015 | 0.968 ± 0.005 | 0.037 ± 0.005 | 0.887 ± 0.005 | 0.481 ± 0.004 | 0.924 ± 0.006 | 0.877 ± 0.029 | 0.813 ± 0.019 |
+| ResNet1D | full | 0.927 ± 0.014 | 0.982 ± 0.005 | 0.021 ± 0.003 | 0.919 ± 0.003 | 0.468 ± 0.003 | 0.962 ± 0.012 | 0.933 ± 0.028 | 0.885 ± 0.016 |
+| GRUClassifier | position | 0.619 ± 0.009 | 0.865 ± 0.006 | 0.161 ± 0.007 | 0.799 ± 0.003 | 0.418 ± 0.009 | 0.712 ± 0.022 | 0.628 ± 0.008 | 0.515 ± 0.018 |
+| GRUClassifier | rotation | 0.738 ± 0.026 | 0.911 ± 0.014 | 0.121 ± 0.007 | 0.829 ± 0.007 | 0.421 ± 0.014 | 0.793 ± 0.061 | 0.737 ± 0.017 | 0.683 ± 0.032 |
+| GRUClassifier | full | 0.815 ± 0.021 | 0.951 ± 0.006 | 0.076 ± 0.007 | 0.852 ± 0.003 | 0.396 ± 0.003 | 0.879 ± 0.008 | 0.824 ± 0.041 | 0.741 ± 0.030 |
+| TransformerClassifier | position | 0.839 ± 0.024 | 0.953 ± 0.005 | 0.077 ± 0.010 | 0.816 ± 0.010 | 0.299 ± 0.002 | 0.880 ± 0.011 | 0.855 ± 0.037 | 0.780 ± 0.024 |
+| TransformerClassifier | rotation | 0.901 ± 0.016 | 0.972 ± 0.010 | 0.045 ± 0.012 | 0.846 ± 0.012 | 0.289 ± 0.003 | 0.948 ± 0.017 | 0.929 ± 0.025 | 0.826 ± 0.013 |
+| TransformerClassifier | full | 0.938 ± 0.017 | 0.991 ± 0.002 | 0.026 ± 0.006 | 0.859 ± 0.008 | 0.279 ± 0.002 | 0.965 ± 0.016 | 0.964 ± 0.023 | 0.884 ± 0.026 |
+
+### RSA z tozsamoscia i urzadzeniem (seed 42, dzien 2)
+
+Spearman miedzy RDM-ami `1 - cosine` na dniu 2; pelna macierz model-model w `results/rsa_models.csv`
+i `results/rsa_models.png`.
+
+| Przebieg | RSA z tozsamoscia | RSA z urzadzeniem |
+|---|---:|---:|
+| resnet_position | 0.249 | 0.019 |
+| resnet_rotation | 0.254 | 0.006 |
+| resnet_full | 0.259 | 0.004 |
+| gru_position | 0.213 | 0.087 |
+| gru_rotation | 0.225 | 0.029 |
+| gru_full | 0.244 | 0.044 |
+| transformer_position | 0.238 | 0.048 |
+| transformer_rotation | 0.254 | 0.005 |
+| transformer_full | 0.260 | 0.014 |
+
+### Wnioski
+
+- **Modalnosc:** `full` > `rotation` > `position` dla kazdego modelu (Rank-1, Rank-5, EER i RSA z tozsamoscia).
+  **To odwrotnie niz przed poprawkami** (wtedy `position` > `rotation`): surowe katy Eulera z zawijaniem
+  na ±pi i gimbal lockiem psuly sygnal rotacji. Po zamianie na reprezentacje 6D rotacja niesie wiecej
+  informacji biometrycznej niz pozycja (np. GRU 0.738 vs 0.619, Transformer 0.901 vs 0.839),
+  a obie modalnosci sa komplementarne (`full` najlepsza wszedzie).
+- **Urzadzenie:** Cosmos ma najnizszy Rank-1 we wszystkich 9 konfiguracjach (model x modalnosc).
+  Quest ma najwyzszy Rank-1 w 9 z 9 (dla Transformer full praktycznie remis z Vive: 0.965 vs 0.964).
+- **Modele:** Transformer i ResNet1D sa porownywalne na `full` (Rank-1 0.938 ± 0.017 vs 0.927 ± 0.014,
+  roznica w granicach odchylenia; EER 0.026 vs 0.021). Transformer ma ok. 6x mniej parametrow
+  i najlepiej separuje osoby (najnizsze cos impostor ~0.28). GRU jest wyraznie najslabszy (0.815, EER 0.076).
+- **RSA model-model:** reprezentacje sa podobne glownie w obrebie tej samej modalnosci
+  (gru_position vs transformer_position 0.68, gru_rotation vs transformer_rotation 0.65),
+  a pozycja i rotacja daja rozne geometrie (0.16-0.25). GRU i Transformer sa do siebie blizsze
+  niz kazdy z nich do ResNet1D.
+- **RSA z urzadzeniem:** pozycja koduje urzadzenie wyraznie mocniej niz rotacja we wszystkich modelach
+  (np. GRU 0.087 vs 0.029, Transformer 0.048 vs 0.005) - pozycje zaleza od ukladu wspolrzednych
+  trackingu danego zestawu, orientacja mniej. GRU najmocniej koduje urzadzenie i ma najnizszy Rank-1.
+
 ## Wyniki przed poprawkami (archiwalne)
 
 Ponizsze tabele sa ze starego kodu: surowe katy Eulera, Rank-5 liczony po probkach (zanizony),
 wybor modelu po val Rank-1, jeden seed. Zostawione do porownania w raporcie.
-Po ponownym treningu nowe tabele wygeneruje `python report_tables.py`.
 
 Klasyfikacja cross-day, galeria z dnia 1, probe z dnia 2:
 
@@ -110,19 +192,7 @@ Klasyfikacja cross-day, galeria z dnia 1, probe z dnia 2:
 | GRUClassifier | 0.9756 | 0.6780 | 0.7463 |
 | TransformerClassifier | 0.9959 | 0.8569 | 0.9122 |
 
-Val jest z dnia 1 i sluzy tylko do wyboru modelu. Test z dnia 2 jest jedynym wynikiem cross-day. Widac wyrazny spadek miedzy val i test, szczegolnie dla GRU, co jest oczekiwane przy zmianie dnia i pokazuje, ze sama walidacja w obrebie dnia 1 nie wystarcza do oceny biometrycznej.
-
-## Ewaluacja, ablacja modalnosci i RSA
-
-```bash
-python ablation.py   # 3 modele x 3 modalnosci x 3 seedy -> results/ablation.csv, ablation_runs.csv, embeddings/<model>_<modalnosc>/
-python rsa.py        # results/rsa_models.csv, rsa_reference.csv, rsa_models.png
-```
-
-Metryki sa w `metrics.py` (Rank-1, Rank-5, EER, cosine similarity). Galeria = dzien 1, probe = dzien 2,
-hiperparametry strojone na `full` uzyte dla wszystkich modalnosci.
-Ponizsze liczby sa ze starego kodu (jeden seed, surowe katy Eulera).
-Wyniki `full` roznia sie nieco od tabeli wyzej, bo to osobny przebieg treningu.
+Ablacja (jeden seed, surowe katy Eulera):
 
 | Model | Modalnosc | Rank-1 | cos genuine | cos impostor | Rank-1 Quest | Rank-1 Vive | Rank-1 Cosmos |
 |---|---|---:|---:|---:|---:|---:|---:|
@@ -136,7 +206,7 @@ Wyniki `full` roznia sie nieco od tabeli wyzej, bo to osobny przebieg treningu.
 | Transformer | rotation | 0.767 | 0.780 | 0.372 | 0.790 | 0.810 | 0.702 |
 | Transformer | full | 0.922 | 0.859 | 0.354 | 0.956 | 0.946 | 0.863 |
 
-RSA (Spearman miedzy RDM-ami `1 - cosine` na dniu 2; pelna macierz w `results/rsa_models.csv`):
+RSA (stare):
 
 | Przebieg | RSA z tozsamoscia | RSA z urzadzeniem |
 |---|---:|---:|
@@ -150,16 +220,9 @@ RSA (Spearman miedzy RDM-ami `1 - cosine` na dniu 2; pelna macierz w `results/rs
 | transformer_rotation | 0.233 | 0.014 |
 | transformer_full | 0.258 | 0.010 |
 
-Wnioski ze starych wynikow (do weryfikacji po ponownym treningu, zwlaszcza position vs rotation):
-
-- **Modalnosc:** `full` jest najlepsza dla kazdego modelu, a sama pozycja jest lepsza niz sama rotacja
-  (Rank-1 i RSA z tozsamoscia). Rotacja wnosi informacje uzupelniajaca: `full` > `position`.
-- **Urzadzenie:** Cosmos wypada najgorzej we wszystkich 9 przebiegach. Quest i Vive sa zblizone,
-  Quest jest najlepszy w 6 z 9 przebiegow.
-- **Modele:** reprezentacje sa podobne glownie w obrebie tej samej modalnosci (np. gru_position vs
-  transformer_position 0.51), a pozycja i rotacja daja wyraznie rozne geometrie (0.11-0.22).
-  GRU i Transformer sa do siebie blizsze niz kazdy z nich do ResNet1D.
-- GRU najmocniej koduje urzadzenie (RSA 0.05-0.09 wobec ok. 0.01-0.02) i ma najnizszy Rank-1.
+Zmiana wzgledem starych wynikow: Rank-1 na `full` wzrosl dla wszystkich modeli
+(ResNet 0.900 -> 0.927, GRU 0.663 -> 0.815, Transformer 0.922 -> 0.938, srednie z 3 seedow),
+a najwiekszy zysk dala rotacja (GRU 0.522 -> 0.738, Transformer 0.767 -> 0.901).
 
 ## Podzial zadan
 
@@ -205,7 +268,10 @@ Wnioski ze starych wynikow (do weryfikacji po ponownym treningu, zwlaszcza posit
 
 ## Setup
 
+Z karta NVIDIA najpierw torch z CUDA (inaczej pip zostawi wersje CPU), np.:
+
 ```bash
+pip install torch --index-url https://download.pytorch.org/whl/cu130
 pip install -r requirements.txt
 ```
 

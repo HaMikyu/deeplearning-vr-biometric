@@ -1,15 +1,15 @@
 {
   "training": {
-    "lr": 0.00034788734988090963,
-    "weight_decay": 0.0024526569804294834,
-    "batch_size": 32
+    "lr": 0.0005368767278697527,
+    "weight_decay": 0.003655978255535866,
+    "batch_size": 64
   },
   "model": {
-    "embedding_dim": 64,
-    "dropout": 0.18510487366948022,
+    "embedding_dim": 128,
+    "dropout": 0.07966245710504548,
     "base_channels": 96
   },
-  "val_rank1": 0.9918699264526367,
-  "val_loss": 0.5093906747131813,
-  "trial": 3
+  "val_rank1": 0.991869918699187,
+  "val_loss": 0.441869854927063,
+  "trial": 5
 }

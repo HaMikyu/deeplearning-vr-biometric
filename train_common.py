@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
 
 from configs import get_config
 from datamodule import VRBiometricDataModule
@@ -39,6 +38,46 @@ def set_seed(seed):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+EVAL_BATCH = 512
+
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True
+
+
+class TensorBatches:
+    """Batche z tensorow lezacych juz na urzadzeniu (zamiast DataLoadera)."""
+
+    def __init__(self, dataset, indices, batch_size, device, shuffle=False, seed=0):
+        idx = (
+            torch.arange(len(dataset.y))
+            if indices is None
+            else torch.as_tensor(indices, dtype=torch.long)
+        )
+        self.x = dataset.x[idx].to(device)
+        self.y = dataset.y[idx].to(device)
+        self.d = dataset.device_ids[idx].to(device)
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.generator = torch.Generator().manual_seed(seed)
+
+    def __len__(self):
+        return (len(self.y) + self.batch_size - 1) // self.batch_size
+
+    def __iter__(self):
+        n = len(self.y)
+        if self.shuffle:
+            order = torch.randperm(n, generator=self.generator).to(self.x.device)
+        else:
+            order = None
+        for start in range(0, n, self.batch_size):
+            if order is None:
+                sl = slice(start, start + self.batch_size)
+                yield self.x[sl], self.y[sl], self.d[sl]
+            else:
+                b = order[start:start + self.batch_size]
+                yield self.x[b], self.y[b], self.d[b]
 
 
 def evaluate(model, loader, criterion, device):
@@ -108,30 +147,16 @@ def run_training(
     )
     dm.setup()
 
-    train_loader = DataLoader(
-        dm.train_ds,
-        batch_size=train_cfg["batch_size"],
-        shuffle=True,
-        num_workers=train_cfg["num_workers"],
+    # Caly zbior (ok. 1-2 MB) trzymamy od razu na GPU i batchujemy indeksami.
+    # DataLoader na Subset robil setki malych kopii CPU->GPU na epoke.
+    base = dm.train_ds.dataset
+    train_loader = TensorBatches(
+        base, dm.train_idx, train_cfg["batch_size"], device,
+        shuffle=True, seed=train_cfg["seed"],
     )
-    eval_train_loader = DataLoader(
-        dm.train_ds,
-        batch_size=train_cfg["batch_size"],
-        shuffle=False,
-        num_workers=train_cfg["num_workers"],
-    )
-    val_loader = DataLoader(
-        dm.val_ds,
-        batch_size=train_cfg["batch_size"],
-        shuffle=False,
-        num_workers=train_cfg["num_workers"],
-    )
-    test_loader = DataLoader(
-        dm.test_ds,
-        batch_size=train_cfg["batch_size"],
-        shuffle=False,
-        num_workers=train_cfg["num_workers"],
-    )
+    eval_train_loader = TensorBatches(base, dm.train_idx, EVAL_BATCH, device)
+    val_loader = TensorBatches(base, dm.val_idx, EVAL_BATCH, device)
+    test_loader = TensorBatches(dm.test_ds, None, EVAL_BATCH, device)
 
     model = build_model(
         model_name,
@@ -202,12 +227,13 @@ def run_training(
                         train_cfg["grad_clip"],
                     )
                 optimizer.step()
-                train_loss_sum += loss.item() * x.size(0)
+                # akumulacja na GPU, bez synchronizacji .item() co batch
+                train_loss_sum += loss.detach() * x.size(0)
                 train_total += x.size(0)
-                train_correct += (logits.argmax(dim=1) == y).sum().item()
+                train_correct += (logits.argmax(dim=1) == y).sum()
 
-            train_loss = train_loss_sum / max(train_total, 1)
-            train_accuracy = train_correct / max(train_total, 1)
+            train_loss = float(train_loss_sum) / max(train_total, 1)
+            train_accuracy = int(train_correct) / max(train_total, 1)
 
             train_eval = evaluate(model, eval_train_loader, criterion, device)
             val_result = evaluate(model, val_loader, criterion, device)
